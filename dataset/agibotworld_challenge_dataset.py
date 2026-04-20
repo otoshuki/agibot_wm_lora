@@ -162,27 +162,31 @@ class AgiBotWorldICRA26Challenge(Dataset):
         delta_action = torch.FloatTensor(delta_action)
         delta_act_meanv, delta_act_stdv = self.get_action_bias_std(domain_name)
 
-        delta_action[:, :6] = (delta_action[:, :6] - self.max_sep*delta_act_meanv[:, :6]) / (self.max_sep*delta_act_stdv[:, :6])
-        delta_action[:, 7:13] = (delta_action[:, 7:13] - self.max_sep*delta_act_meanv[:, 6:]) / (self.max_sep*delta_act_stdv[:, 6:])
+        # ── velocity normalization (unchanged logic, updated indices) ──
+        delta_action[:, 0:6]   = (delta_action[:, 0:6]   - self.max_sep * delta_act_meanv[:, :6])  / (self.max_sep * delta_act_stdv[:, :6])
+        delta_action[:, 14:20] = (delta_action[:, 14:20]  - self.max_sep * delta_act_meanv[:, 6:]) / (self.max_sep * delta_act_stdv[:, 6:])
+    
+        # ── acceleration normalization (zero-mean; reuse vel std as scale) ──
+        delta_action[:, 7:13]  = delta_action[:, 7:13]  / (self.max_sep * delta_act_stdv[:, :6])
+        delta_action[:, 21:27] = delta_action[:, 21:27] / (self.max_sep * delta_act_stdv[:, 6:])
+        # gripper acc (dims 13, 27) is already tiny in [0,1/120] range — leave as-is
         return action, delta_action
 
 
-    def get_action(
-            self, h5_file, slices, domain_name
-        ):
-        """
-        1. extract actions from .h5 files
-        2. obatin End Effector actions and delta_action:
-           action (t, 16)                      : {xyz, quat(xyzw), gripper} * 2
-           delta_action (t-self.n_previous, 14): {xyz, quat(rpy),  gripper} * 2
-        """
+    def get_action(self, h5_file, slices, domain_name):
         action, delta_action = parse_h5(h5_file, slices=slices, delta_act_sidx=self.n_previous)
-        action = torch.FloatTensor(action)
+        action       = torch.FloatTensor(action)
         delta_action = torch.FloatTensor(delta_action)
         delta_act_meanv, delta_act_stdv = self.get_action_bias_std(domain_name)
-        delta_action[:, :6] = (delta_action[:, :6] - self.max_sep*delta_act_meanv[:, :6]) / (self.max_sep*delta_act_stdv[:, :6])
-        delta_action[:, 7:13] = (delta_action[:, 7:13] - self.max_sep*delta_act_meanv[:, 6:]) / (self.max_sep*delta_act_stdv[:, 6:])
-
+    
+        # ── velocity normalization (unchanged logic, updated indices) ──
+        delta_action[:, 0:6]   = (delta_action[:, 0:6]   - self.max_sep * delta_act_meanv[:, :6])  / (self.max_sep * delta_act_stdv[:, :6])
+        delta_action[:, 14:20] = (delta_action[:, 14:20]  - self.max_sep * delta_act_meanv[:, 6:]) / (self.max_sep * delta_act_stdv[:, 6:])
+    
+        # ── acceleration normalization (zero-mean; reuse vel std as scale) ──
+        delta_action[:, 7:13]  = delta_action[:, 7:13]  / (self.max_sep * delta_act_stdv[:, :6])
+        delta_action[:, 21:27] = delta_action[:, 21:27] / (self.max_sep * delta_act_stdv[:, 6:])
+        # gripper acc (dims 13, 27) is already tiny in [0,1/120] range — leave as-is
         return action, delta_action
 
 

@@ -4,14 +4,19 @@ import argparse, os, sys, datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 ### add evac root to path
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.dirname(__file__)), "evac"))
-
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
+warnings.filterwarnings("ignore", message=".*weights_only=False.*")
 from omegaconf import OmegaConf
 from transformers import logging as transf_logging
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from pytorch_lightning.trainer import Trainer
 import torch
-
+torch.set_float32_matmul_precision('high')
 from evac.utils.general_utils import instantiate_from_config, set_logger, load_checkpoints
 from utils_train import get_trainer_callbacks, get_trainer_logger, get_trainer_strategy, init_workspace
 
@@ -68,13 +73,13 @@ if __name__ == "__main__":
     ## MODEL CONFIG >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
     logger.info("***** Configing Model *****")
     config.model.params.logdir = workdir
-    
     model = instantiate_from_config(config.model)
-    
-
+    #Check LoRA
+    model.setup_lora()
     ## load checkpoints
     model = load_checkpoints(model, config.model)
-
+    
+    
     ## register_schedule again to make ZTSNR work
     if model.rescale_betas_zero_snr:
         model.register_schedule(given_betas=model.given_betas, beta_schedule=model.beta_schedule, timesteps=model.timesteps,

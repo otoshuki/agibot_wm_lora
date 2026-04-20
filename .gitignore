@@ -134,3 +134,15 @@ runtime_vis_results/*
 
 log
 log/*
+
+teamace_sub4
+teamace_sub4/*
+
+*.tar.gz
+*.pt
+*.bin
+
+WorldModel
+WorldModel/*
+
+gitignore_visible

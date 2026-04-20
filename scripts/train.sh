@@ -1,12 +1,12 @@
 #!/usr/local/bash
 
 name="agibotworld"
-tag="_expv0"
-config_file=${1:-configs/${name}/train_config.yaml}
+tag="_vf"
+config_file=${1:-configs/${name}/train_config_challenge_wm.yaml}
 
 save_root="./log"
 
-seed=123
+seed=67
 
 NGPU=`nvidia-smi --list-gpus | wc -l`
 export OMP_NUM_THREADS=4

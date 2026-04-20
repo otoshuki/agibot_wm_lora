@@ -1,17 +1,18 @@
 chunk: 16
-n_previous: 4
+n_previous: 8 
 n_view: 1
 
 model:
-  
-  pretrained_checkpoint: PATH_TO_CHECKPOINT
+
+  # pretrained_checkpoint: "/workspace/AgiBotWM/EnerV_AC_deepspeed_v0.1.pt"
+  pretrained_checkpoint: "/workspace/AgiBotWM/log/agibotworld_v3/checkpoints/epoch=1-step=7000.ckpt"
 
   auto_padzero_input_block: False
   auto_padrand_input_block: False
 
-  base_learning_rate: 5e-5
+  base_learning_rate: 1e-5
   scale_lr: False
-  target: evac.lvdm.models.ddpm3d.ACWMLatentDiffusion
+  target: lvdm.models.ddpm3d.ACWMLatentDiffusion
   params:
     rescale_betas_zero_snr: True
     parameterization: "v"
@@ -22,9 +23,47 @@ model:
     timesteps: 1000
     first_stage_key: ["video", "traj"]
     cond_stage_key: delta_action
-    cond_stage_trainable: False
-    image_proj_model_trainable: True
-    traj_prompt_proj_model_trainable: True
+    cond_stage_trainable: True
+    image_proj_model_trainable: False
+    traj_prompt_proj_model_trainable: False
+    
+    #New addition
+    # unet_trainable_list:
+    #   - "attn2"
+    #   - ".2.transformer_blocks.0.attn1"
+    unet_trainable_list:
+      - "init_attn"
+      - "lora_"
+    use_lora: True
+    lora_rank: 32
+    lora_alpha: 32
+
+    # NEW: Min-SNR-gamma loss weighting (Hang et al. 2023). Rebalances timestep
+    # gradient mass toward mid-noise steps where motion structure is learned.
+    # Read by ACWMLatentDiffusion.p_losses (patched in ddpm3d.py).
+    use_min_snr: True
+    min_snr_gamma: 8.0
+ 
+    # NEW: motion-weighted loss. Multiplies per-pixel loss by a mask derived
+    # from |x_t - x_{t-1}| in latent space, so fast-moving objects get more
+    # gradient instead of being drowned by static background.
+    use_motion_weighted_loss: True
+    motion_weight_strength: 1.5   # max multiplier for a fast pixel (1.0 = off)
+ 
+    # NEW: latent motion consistency loss. Penalizes mismatch between predicted
+    # and target temporal differences. Cheap, directly improves motion PSNR.
+    motion_consistency_weight: 0.1
+ 
+    # NEW: self-forcing / memory noising. During training, with probability p,
+    # add mild noise to memory frames to close the exposure-bias gap between
+    # train (clean memory) and inference (generated, imperfect memory).
+    # This is the single biggest thing for object permanence & long-horizon consistency.
+    use_noisy_memory: True
+    noisy_memory_prob: 0.3
+    noisy_memory_max_t: 250   # sample t uniformly in [0, 200] for memory frames
+    
+    #####
+
     conditioning_key: hybrid
     image_size: [40, 64]
     channels: 4
@@ -53,7 +92,7 @@ model:
     views_name_wo_imgcat: ["left_hand", "right_hand"]
 
     unet_config:
-      target: evac.lvdm.modules.networks.openaimodel3dcausal.UNetModel
+      target: lvdm.modules.networks.openaimodel3dcausal.UNetModel
       params:
         ### img(4) + mask(1) + cond img(4) + traj(4) + ray(6)
         in_channels: 19
@@ -95,7 +134,7 @@ model:
         adapt_to_mvt: True
 
     first_stage_config:
-      target: evac.lvdm.models.autoencoder.AutoencoderKL
+      target: lvdm.models.autoencoder.AutoencoderKL
       params:
         embed_dim: 4
         monitor: val/rec_loss
@@ -118,25 +157,25 @@ model:
           target: torch.nn.Identity
 
     cond_stage_config:
-      target: evac.lvdm.modules.encoders.resampler.Resampler
+      target: lvdm.modules.encoders.resampler.Resampler
       params:
         dim: 1024
         depth: 4
         dim_head: 64
         heads: 12
         num_queries: 16
-        embedding_dim: 14
+        embedding_dim: 28 #14
         output_dim: 1024
         ff_mult: 4
 
     img_cond_stage_config:
-      target: evac.lvdm.modules.encoders.condition.FrozenOpenCLIPImageEmbedderV2
+      target: lvdm.modules.encoders.condition.FrozenOpenCLIPImageEmbedderV2
       params:
-        abspath: CLIP_WEIGHT_PATH
+        abspath: "/workspace/AgiBotWM/open_clip_pytorch_model.bin"
         freeze: true
-    
+
     image_proj_stage_config:
-      target: evac.lvdm.modules.encoders.resampler.Resampler
+      target: lvdm.modules.encoders.resampler.Resampler
       params:
         dim: 1024
         depth: 4
@@ -151,12 +190,12 @@ model:
 data:
   target: dataset.utils_data.DataModuleFromConfig
   params:
-    batch_size: 8
+    batch_size: 5 #8
     num_workers: 8
     train:
       target: dataset.agibotworld_challenge_dataset.AgiBotWorldICRA26Challenge
       params:
-        data_roots: ["PATH_TO_ICRA26_WM_DATASET", ]
+        data_roots: ["/workspace/AgiBotWM/WorldModel/mnt/public/chenshengcong/dataset/iros_challenge_2025_acwm/", ]
         domains: ["agibotworld", ]
         split: "train"
         sample_size: [320, 512]
@@ -168,24 +207,24 @@ data:
         previous_pick_mode: 'random'
         random_crop: True
         min_sep: 1
-        max_sep: 3
+        max_sep: 5
 
 lightning:
-  precision: 16
-  # strategy: deepspeed_stage_2
+  precision: bf16
+  #strategy: fsdp_native #deepspeed_stage_2 but commented out
   trainer:
     benchmark: True
     accumulate_grad_batches: 1
     max_steps: 100000
     log_every_n_steps: 20
-    val_check_interval: 2
+    val_check_interval: 1000
     gradient_clip_algorithm: 'norm'
-    gradient_clip_val: 0.5
+    gradient_clip_val: 1.0
   callbacks:
     model_checkpoint:
       target: pytorch_lightning.callbacks.ModelCheckpoint
       params:
-        every_n_train_steps: 5000
+        every_n_train_steps: 1000
         filename: "{epoch}-{step}"
         save_weights_only: True
     metrics_over_trainsteps_checkpoint:
@@ -193,19 +232,19 @@ lightning:
       params:
         filename: '{epoch}-{step}'
         save_weights_only: True
-        every_n_train_steps: 3000
+        every_n_train_steps: 2000
     batch_logger:
       target: callbacks.ImageLogger
       params:
-        batch_frequency:  100
+        batch_frequency:  500
         ### save videos
         to_local: True
         cat_all_to_save: True
         save_dir: runtime_vis_results/expv0
         max_images: 6400
         log_images_kwargs:
-          ddim_steps: 27
-          unconditional_guidance_scale: 7.5
+          ddim_steps: 80
+          unconditional_guidance_scale: 5.0
           timestep_spacing: uniform_trailing
-          guidance_rescale: 0.7
+          guidance_rescale: 0.5
           save_fps: 15

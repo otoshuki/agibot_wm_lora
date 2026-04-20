@@ -18,7 +18,6 @@ xformers==0.0.27.post2
 accelerate==1.0.0
 diffusers==0.30.3
 einops==0.8.0
-mmcv==2.2.0
 omegaconf==2.3.0
 open-clip-torch==2.22.0
 pytorch-lightning==1.9.5
