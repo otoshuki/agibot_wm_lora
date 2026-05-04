@@ -1,8 +1,8 @@
-# World Model Baseline
+# Modified World Model Baseline
 
-We adopt [EVAC](https://github.com/AgibotTech/EnerVerse-AC) as the baseline model for the [AgiBot World Challenge @ ICRA 2026](https://agibot-world.com/challenge2026) - World Model track.
+## This is a modified version of the EVAC world model for [AgiBot World Challenge @ ICRA 2026](https://agibot-world.com/challenge2026) - World Model track.
 
-This repo provides a minial version of training codes. 
+We add LoRA modules to a pretrained model from [EVAC](https://github.com/AgibotTech/EnerVerse-AC) with updated loss function.
 
 ## News 
 
